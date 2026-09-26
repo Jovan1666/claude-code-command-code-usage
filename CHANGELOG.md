@@ -1,0 +1,57 @@
+# Changelog
+
+## 1.0.2 — 2026-09-24
+
+- **Fixed the upgrade path that 1.0.1 introduced an hour earlier.** The merged status-line wrapper picked
+  the plugin's copy of the script by directory mtime, and since copying preserves timestamps, the *old*
+  version directory looked newer: right after upgrading to 1.0.1 the wrapper resolved 1.0.0 again. It now
+  compares version numbers first and only falls back to mtime for directories that are not versions (a
+  commit hash, say). Reproduced against the real cache and covered by the `installer` suite.
+
+  Note for anyone already on 1.0.1: the wrapper script lives in your config directory and is written by
+  `setup.mjs`, not by the plugin — so after updating, run `setup.mjs --merge --rows 1` once to regenerate
+  it. (The plugin update itself only replaces the files inside the plugin cache.)
+
+## 1.0.1 — 2026-09-24
+
+- **The monthly amount on the status line is labelled.** `月 ██▏ 18% 剩$57.60` — the bar is what
+  has been used and the figure is what is left, so the figure needed a word in front of it.
+  Same in the three-row layout.
+- **Quota snapshots refresh every three minutes instead of every minute** (`cacheTtl` 60s → 180s).
+  The old default equalled the refresh interval most hosts use, so every tick started a background
+  process and made four API calls — for a number that cannot visibly move in three minutes. Pass
+  `--cache-ttl 60` to restore the old cadence.
+- **The status-line command no longer contains a version number.** It points at a copy of the script
+  kept in the config directory, and the merged wrapper resolves the plugin's own copy at run time. A
+  plugin upgrade used to leave a dead path behind, and the quota line disappeared without a word.
+  Failures now land in `~/.claude/commandcode-statusline.log` instead of nowhere.
+
+## 1.0.0 — 2026-09-21
+
+First release.
+
+- Reads Command Code plan usage: rolling 5-hour and weekly windows, monthly credits, reset times. Caps
+  come from the API; a local plan table is only a fallback.
+- Credential discovery, from explicit env vars through the provider route you already configured in
+  Claude Code.
+- Disk snapshot with background refresh: first call is a live read, later calls answer in ~90 ms from
+  the snapshot and refresh behind it.
+- Decides **per turn** whether the session is actually routed to Command Code — from the local router's
+  own env mapping, or the model the transcript records. Not in Command Code's public model catalog →
+  the status line hides itself.
+- Fails quietly: no credential, no API access, offline, or a rejected key all render nothing rather than
+  an error. A failed fetch backs off for five minutes.
+- Runs as a CLI or imports as a library (`fetchView()`, `resolveCredentials()`, `normalize()`).
+- A `/quota` command for when you want the numbers in the transcript instead of the status bar.
+- Status line, multi-line with ANSI. `setup.mjs` merges it with an existing status line and restores
+  that one on `--remove`.
+
+**Deliberate omissions**
+
+- **No pacing warning in the status line.** The projection is in `--json`, and the panels you ask for
+  (`--compact`, `--md`, `--html`, the terminal view) still print it — it is only kept out of the
+  always-on surface. Extrapolating from a short sample reports "you will run out" almost every time,
+  and a warning that is always on is not a warning.
+- **No web panel as the default surface.** The status line is the primary path; `--html` still exists
+  for the occasional big-picture look, but nothing points you at a browser tab — checking one is no
+  better than the vendor's own dashboard.

@@ -1,0 +1,50 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # 三个平台都跑：核心脚本的很多决定是平台相关的（行尾、路径分隔符、
+        # Git Bash 走不走、CJK 宽度），只在 Linux 上绿过不等于能用。
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ['18', '22']
+
+    steps:
+      # 固定到提交，不用可变的 major 标签：标签能被改指，提交不能。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      # 全部检查都在这个脚本里：渲染断言、隐藏逻辑、阈值与钩子、输出格式、
+      # 静态检查、密钥扫描、状态栏组装脚本。本地跑同一条命令，不会出现"本地过 CI 挂"。
+      - name: 仓库检查
+        run: node scripts/check.mjs
+
+      # 离线冒烟：check.mjs 之外再逐个跑一遍六种输出模式，任何一个非 0 退出就红。
+      # --demo 只读内置样例，不联网、不需要凭证，所以这一步在任何机器上都能跑。
+      - name: 离线冒烟（六种输出模式）
+        shell: bash
+        run: |
+          set -e
+          CC=scripts/cc-usage.mjs
+          node "$CC" --help > /dev/null
+          node "$CC" --demo > /dev/null
+          node "$CC" --demo hot > /dev/null
+          node "$CC" --demo --md > /dev/null
+          node "$CC" --demo --compact > /dev/null
+          node "$CC" --demo --json > /dev/null
+          echo "六种输出模式全部退出 0"
